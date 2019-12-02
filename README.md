@@ -18,6 +18,7 @@ I wanted a probe to connect to Mikrotik RouterOS devices via SSH. So I created t
 ![Target](https://github.com/tonydm/smokeping-OpenSSHMikrotikRouterOSPing/blob/master/screenshots/smokeping-target-graph.png)
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
+![GitHub All Releases](https://img.shields.io/github/downloads/tonydm/smokeping-OpenSSHMikrotikRouterOSPing/total)
 [![GitHub forks](https://img.shields.io/github/forks/tonydm/smokeping-OpenSSHMikrotikRouterOSPing)](https://github.com/tonydm/smokeping-OpenSSHMikrotikRouterOSPing/network)
 [![GitHub stars](https://img.shields.io/github/stars/tonydm/smokeping-OpenSSHMikrotikRouterOSPing)](https://github.com/tonydm/smokeping-OpenSSHMikrotikRouterOSPing/stargazers)
 [![GitHub issues](https://img.shields.io/github/issues/tonydm/smokeping-OpenSSHMikrotikRouterOSPing)](https://github.com/tonydm/smokeping-OpenSSHMikrotikRouterOSPing/issues)
