@@ -91,16 +91,18 @@ sub pingone ($$){
   my %upd;
   my @args = ();
 
+  # Note: To debug the SSH Connection modify the master_opts options to include ""-vvv"
+	# master_opts => [-o => "StrictHostKeyChecking=no", "-vvv"],
   my $ssh = Net::OpenSSH->new(
-      $source,
-      $login ? ( user => $login ) : (),
-      $password ? ( password => $password ) : (),
-      timeout => 60,
-	    strict_mode => 0,
-  		kill_ssh_on_timeout => 1,
-  		ctl_dir => "/tmp/.libnet-openssh-perl",
- 			master_opts => [-o => "StrictHostKeyChecking=no", "-vvv"],
-	    $ssh_cmd ? (ssh_cmd => $ssh_cmd) : (ssh_cmd => '/usr/bin/ssh')
+    $source,
+    $login ? ( user => $login ) : (),
+    $password ? ( password => $password ) : (),
+    timeout => 60,
+    strict_mode => 0,
+    kill_ssh_on_timeout => 1,
+    ctl_dir => "/tmp/.libnet-openssh-perl",
+    master_opts => [-o => "StrictHostKeyChecking=no"],
+    $ssh_cmd ? (ssh_cmd => $ssh_cmd) : (ssh_cmd => '/usr/bin/ssh')
   );
 
   if ($ssh->error) {
