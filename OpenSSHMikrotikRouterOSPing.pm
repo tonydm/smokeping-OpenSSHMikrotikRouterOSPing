@@ -71,7 +71,7 @@ sub new($$$)
 sub ProbeDesc($){
     my $self = shift;
     my $bytes = $self->{properties}{packetsize};
-    return "Arista EOS - ICMP Echo Pings ($bytes Bytes)";
+    return "Mikrotik RouterOS - ICMP Echo Pings ($bytes Bytes)";
 }
 
 sub pingone ($$){
