@@ -210,6 +210,11 @@ specified with the option routerosuser.
 DOC
 			_example => 'password',
 		},
+		ssh_port => {
+      _doc => 'Connect to this port.',
+      _re => '\d+',
+      _default => 22,
+    },
     ssh_binary_path => {
       _doc => <<DOC,
 The ssh_binary_path option specifies the path for the ssh client binary.
@@ -217,7 +222,7 @@ This option will specify the path to the OpenSSH host connector.  To find the
 path use "which ssh".
 DOC
       _example => "/usr/bin/ssh"
-    }
+    },
 	});
 }
 
