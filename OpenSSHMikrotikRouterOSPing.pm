@@ -19,6 +19,7 @@ use strict;
 use base qw(Smokeping::probes::basefork);
 use Net::OpenSSH;
 use Carp;
+use Data::Dumper;
 
 my $e = "=";
 sub pod_hash {
@@ -27,7 +28,7 @@ sub pod_hash {
 Smokeping::probes::OpenSSHMikrotikRouterOSPing - Mikrotik RouterOS SSH Probe for SmokePing
 DOC
 		description => <<DOC,
-Connect to Mikrotik Router Device via OpenSSH to run ping commands.
+Connect to Mikrotik RouterOS Device via OpenSSH to run ping commands.
 This probe uses the "ping" cli of the Mikrotik RouterOS.  You have
 the option to specify which interface the ping is sourced from as well.
 DOC
@@ -77,6 +78,7 @@ sub ProbeDesc($){
 sub pingone ($$){
   my $self = shift;
   my $target = shift;
+  my $port = $target->{vars}{ssh_port};
   my $source = $target->{vars}{source};
   my $dest = $target->{vars}{host};
   my $psource = $target->{vars}{psource};
@@ -97,6 +99,7 @@ sub pingone ($$){
     $source,
     $login ? ( user => $login ) : (),
     $password ? ( password => $password ) : (),
+		port => $port,
     timeout => 60,
     strict_mode => 0,
     kill_ssh_on_timeout => 1,
@@ -111,7 +114,7 @@ sub pingone ($$){
   };
 
   # Debug
-  # $self->do_log("ping $dest count=$pings size=$bytes src-address=$psource");
+  $self->do_log("ping $dest count=$pings size=$bytes src-address=$psource");
 
   if ( $psource ) {
      @output = $ssh->capture("ping $dest count=$pings size=$bytes src-address=$psource");
@@ -156,14 +159,16 @@ sub probevars {
 			_doc => <<DOC,
 The (optional) packetsize option lets you configure the packetsize for
 the pings sent.  You cannot ping with packets larger than the MTU of
-the source interface, so the packet size should always be equal or less than MTU
+the source interface, so the packet size should always be equal to or less than
+the MTU on the interface.  MTU size can vary on each model of the Mikrotik
+RouterBoard.  Reference your model for appropriate values if you wish to override.
 DOC
-			_default => 100,
+			_default => 56,
 			_re => '\d+',
 			_sub => sub {
 				my $val = shift;
-				return "ERROR: packetsize must be between 12 and 1600"
-					unless $val >= 12 and $val <= 1600;
+				return "ERROR: packetsize of $val is invalid.  Must be between 12 and 10226"
+					unless $val >= 12 and $val <= 10226;
 				return undef;
 			},
 		},
@@ -172,7 +177,15 @@ DOC
 
 sub targetvars {
 	my $class = shift;
-	return $class->_makevars($class->SUPER::targetvars, {
+	# Override defaults
+	# Modify pings
+	# Add ssh_port
+	# Add ssh_binary_path
+  my $h = $class->SUPER::targetvars;
+  delete $h->{pings};
+
+	# Define the parameters/options
+	my $params = {
 		_mandatory => [ 'routerosuser', 'routerospass', 'source' ],
 		source => {
 			_doc => <<DOC,
@@ -210,20 +223,40 @@ specified with the option routerosuser.
 DOC
 			_example => 'password',
 		},
+		pings => {
+      _doc => <<DOC,
+The (optional) pings option lets you configure the number of pings for
+the pings sent.  A reasonable max value is 20.  However, a max value of 50
+allowed.
+DOC
+      _default => 20,
+      _re => '\d+',
+			_sub => sub {
+				my $val = shift;
+				return "ERROR: ping value of $val is invalid.  Must be >= 1 and <= 50"
+			        unless $val >= 1 and $val <= 50;
+				return undef;
+			},
+      _example => "20",
+    },
 		ssh_port => {
       _doc => 'Connect to this port.',
       _re => '\d+',
       _default => 22,
+			_example => 22431,
     },
     ssh_binary_path => {
       _doc => <<DOC,
 The ssh_binary_path option specifies the path for the ssh client binary.
-This option will specify the path to the OpenSSH host connector.  To find the
+This option will specify the path to the OpenSSH host connector.  It may be
+necessary to define the path to the binary if it is not found.  To find the
 path use "which ssh".
 DOC
-      _example => "/usr/bin/ssh"
-    },
-	});
+      _example => "/usr/bin/ssh",
+    }
+	};
+
+	return $class->_makevars($h, $params);
 }
 
 1;
