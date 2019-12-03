@@ -114,7 +114,7 @@ sub pingone ($$){
   };
 
   # Debug
-  $self->do_log("ping $dest count=$pings size=$bytes src-address=$psource");
+  # $self->do_log("ping $dest count=$pings size=$bytes src-address=$psource");
 
   if ( $psource ) {
      @output = $ssh->capture("ping $dest count=$pings size=$bytes src-address=$psource");
