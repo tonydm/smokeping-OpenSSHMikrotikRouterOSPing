@@ -43,7 +43,7 @@ I wanted a probe to connect to Mikrotik RouterOS devices via SSH. So I created t
 ### Supports
  - Source IP
  - Host (dest) IP or FQDN.  (FQDN if DNS is enabled on Mikrotik Router)
- - Packet Size (Default: 100)
+ - Packet Size (Default: 56)
  - Target Ping Count (Default: 20, MAX: 50)
  - Target SSH Port (Default: 22)
  - User defined openssh-client path (/usr/bin/ssh)
