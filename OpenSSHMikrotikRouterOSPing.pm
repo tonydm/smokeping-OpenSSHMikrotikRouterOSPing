@@ -23,16 +23,16 @@ use Data::Dumper;
 
 my $e = "=";
 sub pod_hash {
-	return {
-		name => <<DOC,
+  return {
+  name => <<DOC,
 Smokeping::probes::OpenSSHMikrotikRouterOSPing - Mikrotik RouterOS SSH Probe for SmokePing
 DOC
-		description => <<DOC,
+  description => <<DOC,
 Connect to Mikrotik RouterOS Device via OpenSSH to run ping commands.
 This probe uses the "ping" cli of the Mikrotik RouterOS.  You have
 the option to specify which interface the ping is sourced from as well.
 DOC
-		notes => <<DOC,
+  notes => <<DOC,
 ${e}head2 Mikrotik RouterOS configuration
 
 The Mikrotik RouterOS device should have a username/password configured, and
@@ -48,31 +48,30 @@ ${e}head2 Requirements
 
 This module requires the  L<Net::OpenSSH> and L<IO::Pty> perl modules.
 DOC
-		authors => <<'DOC',
+  authors => <<'DOC',
 Tony DeMatteis E<lt>tonydema@gmail.comE<gt>
 
 based on L<Smokeping::Probes::OpenSSHJunOSPing> by Tobias Oetiker E<lt>tobi@oetiker.chE<gt>,
 which itself is
 based on L<Smokeping::probes::TelnetJunOSPing> by S H A N E<lt>shanali@yahoo.comE<gt>.
 DOC
-	}
+  }
 }
 
-sub new($$$)
-{
-    my $proto = shift;
-    my $class = ref($proto) || $proto;
-    my $self = $class->SUPER::new(@_);
+sub new($$$){
+  my $proto = shift;
+  my $class = ref($proto) || $proto;
+  my $self = $class->SUPER::new(@_);
 
-    $self->{pingfactor} = 1000; # Gives us a good-guess default
+  $self->{pingfactor} = 1000; # Gives us a good-guess default
 
-    return $self;
+  return $self;
 }
 
 sub ProbeDesc($){
-    my $self = shift;
-    my $bytes = $self->{properties}{packetsize};
-    return "Mikrotik RouterOS - ICMP Echo Pings ($bytes Bytes)";
+  my $self = shift;
+  my $bytes = $self->{properties}{packetsize};
+  return "Mikrotik RouterOS - ICMP Echo Pings ($bytes Bytes)";
 }
 
 sub pingone ($$){
@@ -94,12 +93,12 @@ sub pingone ($$){
   my @args = ();
 
   # Note: To debug the SSH Connection modify the master_opts options to include ""-vvv"
-	# master_opts => [-o => "StrictHostKeyChecking=no", "-vvv"],
+  # master_opts => [-o => "StrictHostKeyChecking=no", "-vvv"],
   my $ssh = Net::OpenSSH->new(
     $source,
     $login ? ( user => $login ) : (),
     $password ? ( password => $password ) : (),
-		port => $port,
+    port => $port,
     timeout => 60,
     strict_mode => 0,
     kill_ssh_on_timeout => 1,
@@ -109,22 +108,22 @@ sub pingone ($$){
   );
 
   if ($ssh->error) {
-      $self->do_log( "OpenSSHMikrotikRouterOSPing connecting $source: ".$ssh->error );
-      return ();
+    $self->do_log( "OpenSSHMikrotikRouterOSPing connecting $source: ".$ssh->error );
+    return ();
   };
 
   # Debug
   # $self->do_log("ping $dest count=$pings size=$bytes src-address=$psource");
 
   if ( $psource ) {
-     @output = $ssh->capture("ping $dest count=$pings size=$bytes src-address=$psource");
+    @output = $ssh->capture("ping $dest count=$pings size=$bytes src-address=$psource");
   } else {
-     @output = $ssh->capture("ping $dest count=$pings size=$bytes");
+    @output = $ssh->capture("ping $dest count=$pings size=$bytes");
   }
 
   if ($ssh->error) {
-      $self->do_log( "OpenSSHMikrotikRouterOSPing running commands on $source: ".$ssh->error );
-      return ();
+    $self->do_log( "OpenSSHMikrotikRouterOSPing running commands on $source: ".$ssh->error );
+    return ();
   };
 
   pop @output;
@@ -136,10 +135,10 @@ sub pingone ($$){
   my @times = ();
 
   while (@output) {
-		my $outputline = shift @output;
-		chomp($outputline);
+    my $outputline = shift @output;
+    chomp($outputline);
     next if ($outputline =~ m/(sent|recieved|packet\-loss|min\-rtt|avg\-rtt)/);
-		$outputline =~ /(\d)ms/ && push(@times,$1);
+    $outputline =~ /(\d)ms/ && push(@times,$1);
   }
 
   @times = map {sprintf "%.10e", $_ / $self->{pingfactor}} sort {$a <=> $b} @times;
@@ -153,49 +152,49 @@ sub pingone ($$){
 }
 
 sub probevars {
-	my $class = shift;
-	return $class->_makevars($class->SUPER::probevars, {
-		packetsize => {
-			_doc => <<DOC,
+  my $class = shift;
+  return $class->_makevars($class->SUPER::probevars, {
+    packetsize => {
+      _doc => <<DOC,
 The (optional) packetsize option lets you configure the packetsize for
 the pings sent.  You cannot ping with packets larger than the MTU of
 the source interface, so the packet size should always be equal to or less than
 the MTU on the interface.  MTU size can vary on each model of the Mikrotik
 RouterBoard.  Reference your model for appropriate values if you wish to override.
 DOC
-			_default => 56,
-			_re => '\d+',
-			_sub => sub {
-				my $val = shift;
-				return "ERROR: packetsize of $val is invalid.  Must be between 12 and 10226"
-					unless $val >= 12 and $val <= 10226;
-				return undef;
-			},
-		},
-	});
+      _default => 56,
+      _re => '\d+',
+      _sub => sub {
+        my $val = shift;
+        return "ERROR: packetsize of $val is invalid.  Must be between 12 and 10226"
+          unless $val >= 12 and $val <= 10226;
+        return undef;
+      },
+    },
+  });
 }
 
 sub targetvars {
-	my $class = shift;
-	# Override defaults
-	# Modify pings
-	# Add ssh_port
-	# Add ssh_binary_path
+  my $class = shift;
+  # Override defaults
+  # Modify pings
+  # Add ssh_port
+  # Add ssh_binary_path
   my $h = $class->SUPER::targetvars;
   delete $h->{pings};
 
-	# Define the parameters/options
-	my $params = {
-		_mandatory => [ 'routerosuser', 'routerospass', 'source' ],
-		source => {
-			_doc => <<DOC,
+  # Define the parameters/options
+  my $params = {
+    _mandatory => [ 'routerosuser', 'routerospass', 'source' ],
+    source => {
+      _doc => <<DOC,
 The source option specifies the Mikrotik RouterOS device that is going to run
 the ping commands.  This address will be used for the ssh connection.
 DOC
-			_example => "192.168.2.1",
-		},
-		psource => {
-			_doc => <<DOC,
+      _example => "192.168.2.1",
+    },
+    psource => {
+      _doc => <<DOC,
 The (optional) psource option specifies an alternate IP address or
 Interface from which you wish to source your pings from.  Mikrotik routers
 can have many many IP addresses, and interfaces.  When you ping from a
@@ -207,23 +206,23 @@ option is left out the Mikrotik RouterOS Device will source the packet
 automatically based on routing and/or metrics.  If this doesn't make sense
 to you then just leave it out.
 DOC
-			_example => "192.168.2.129",
-		},
-		routerosuser => {
-			_doc => <<DOC,
+      _example => "192.168.2.129",
+    },
+    routerosuser => {
+      _doc => <<DOC,
 The routerosuser option allows you to specify a username that has ping
 capability on the Mikrotik RouterOS Device.
 DOC
-			_example => 'user',
-		},
-		routerospass => {
-			_doc => <<DOC,
+      _example => 'user',
+    },
+    routerospass => {
+      _doc => <<DOC,
 The routerospass option allows you to specify the password for the username
 specified with the option routerosuser.
 DOC
-			_example => 'password',
-		},
-		pings => {
+      _example => 'password',
+    },
+    pings => {
       _doc => <<DOC,
 The (optional) pings option lets you configure the number of pings for
 the pings sent.  A reasonable max value is 20.  However, a max value of 50
@@ -231,19 +230,19 @@ allowed.
 DOC
       _default => 20,
       _re => '\d+',
-			_sub => sub {
-				my $val = shift;
-				return "ERROR: ping value of $val is invalid.  Must be >= 1 and <= 50"
-			        unless $val >= 1 and $val <= 50;
-				return undef;
-			},
+      _sub => sub {
+        my $val = shift;
+        return "ERROR: ping value of $val is invalid.  Must be >= 1 and <= 50"
+          unless $val >= 1 and $val <= 50;
+        return undef;
+      },
       _example => "20",
     },
-		ssh_port => {
+    ssh_port => {
       _doc => 'Connect to this port.',
       _re => '\d+',
       _default => 22,
-			_example => 22431,
+      _example => 22431,
     },
     ssh_binary_path => {
       _doc => <<DOC,
@@ -254,9 +253,9 @@ path use "which ssh".
 DOC
       _example => "/usr/bin/ssh",
     }
-	};
+  };
 
-	return $class->_makevars($h, $params);
+  return $class->_makevars($h, $params);
 }
 
 1;
