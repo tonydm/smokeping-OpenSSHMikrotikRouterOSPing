@@ -106,7 +106,7 @@ sub pingone ($$){
     kill_ssh_on_timeout => 1,
     ctl_dir => "/tmp/.libnet-openssh-perl",
     master_opts => [-o => "StrictHostKeyChecking=no"],
-    $ssh_cmd ? (ssh_cmd => $ssh_cmd) : (ssh_cmd => '/usr/bin/ssh')
+    ssh_cmd => $ssh_cmd
   );
 
   if ($ssh->error) {
@@ -248,8 +248,9 @@ DOC
 The ssh_binary_path option specifies the path for the ssh client binary.
 This option will specify the path to the OpenSSH host connector.  It may be
 necessary to define the path to the binary if it is not found.  To find the
-path use "which ssh".
+path use "which ssh".  Default: /usr/bin/ssh
 DOC
+      _default => "/usr/bin/ssh",
       _example => "/usr/bin/ssh",
     }
   };
