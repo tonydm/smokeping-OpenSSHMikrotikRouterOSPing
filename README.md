@@ -115,7 +115,7 @@ host = speedtest-nyc1.digitalocean.com
 ++ my_remote_router
 title = My Remote Router
 source = myremoterouter_IP_WAN_Address
-psource - not used.  will use source IP
+# psource - not used.  will use source IP
 host = my_edge_router_IP
 ssh_port = 22431
   ````
