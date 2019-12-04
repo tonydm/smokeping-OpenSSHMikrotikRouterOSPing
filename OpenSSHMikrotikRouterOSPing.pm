@@ -19,7 +19,9 @@ use strict;
 use base qw(Smokeping::probes::basefork);
 use Net::OpenSSH;
 use Carp;
-use Data::Dumper;
+
+# Debugging
+# use Data::Dumper;
 
 my $e = "=";
 sub pod_hash {
