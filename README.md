@@ -1,5 +1,7 @@
 # Smokeping - OpenSSHMikrotikRouterOSPing Probe
 
+![Logo](https://github.com/tonydm/smokeping-OpenSSHMikrotikRouterOSPing/blob/master/screenshots/smokeping_logo.png)
+
 Mikrotik RouterOS SSH Ping probe for Smokeping
 
 This is a probe for Smokeping that connects to a Mikrotik RouterOS Device via SSH to source ping requests to monitor latency.
