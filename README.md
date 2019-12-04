@@ -107,12 +107,16 @@ source = 172.20.0.1
 psource = <WAN/Public Facing IP Address>
 
 ++ nyc1_digitalocean_com
-host = speedtest-nyc1.digitalocean.com
 title = speedtest-nyc1.digitalocean.com (DigitalOcean New York 1)
+host = speedtest-nyc1.digitalocean.com
+# source - uses parent defined
+# psource - uses parent defined
 
-++ my_remote_server.com
-host = my_remote_server
-title = My Remote Server
+++ my_remote_router
+title = My Remote Router
+source = myremoterouter_IP_WAN_Address
+psource - not used.  will use source IP
+host = my_edge_router_IP
 ssh_port = 22431
   ````
 
