@@ -128,9 +128,6 @@ sub pingone ($$){
     return ();
   };
 
-  pop @output;
-  pop @output;
-
   # Debug
   # $self->do_log(Dumper \@output);
 
@@ -140,7 +137,7 @@ sub pingone ($$){
     my $outputline = shift @output;
     chomp($outputline);
     next if ($outputline =~ m/(sent|recieved|packet\-loss|min\-rtt|avg\-rtt)/);
-    $outputline =~ /(\d)ms/ && push(@times,$1);
+    $outputline =~ /(\d+)ms/ && push(@times,$1);
   }
 
   @times = map {sprintf "%.10e", $_ / $self->{pingfactor}} sort {$a <=> $b} @times;
