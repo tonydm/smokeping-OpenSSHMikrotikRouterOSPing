@@ -34,7 +34,7 @@ I wanted a probe to connect to Mikrotik RouterOS devices via SSH. So I created t
   ** Your OS may require that you install the openssh-client if you are seeing any of the following errors:
   
   - ```SSH connection failed: unable to establish master SSH connection: bad password or master process exited unexpectedly at```
-  - ```unable to establish master SSH connection```
+```unable to establish master SSH connection```
   
   This is because the version of the Net::OpenSSH Perl module installed on your distro does not provide the multiplexing functionality required
   
@@ -90,7 +90,7 @@ total 8
 drwxr--r-- 2 abc  users 4096 Oct 16 08:55  ./
 drwxrwxrwt 1 root root  4096 Oct 16 08:47  ../
 srw------- 1 abc  users    0 Oct 16 08:55 'control-smokeping@10.10.0.1'=
-srw------- 1 abc  users    0 Oct 16 08:55 'control-smokeping@159.118.128.200'=
+srw------- 1 abc  users    0 Oct 16 08:55 'control-smokeping@10.20.12.1'=
 
 ```
 
