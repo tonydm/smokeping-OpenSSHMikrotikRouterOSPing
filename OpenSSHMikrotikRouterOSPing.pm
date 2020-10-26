@@ -20,21 +20,17 @@ use base qw(Smokeping::probes::basefork);
 use Net::OpenSSH;
 use Carp;
 
-# # Debugging
-# use Data::Dumper;
+# Global VARs for Debugging & Multiplexing SSH Connections
+my $debug;
+my $debug_key;
+my $master_control_socket_dir;
+my $multiplex_control_socket_path;
+my $master_control_socket_path_file;
+my $master_control_socket_file;
 
-# use Log::Log4perl qw(:easy);
-# Log::Log4perl->easy_init(
-#   {
-#     file  => ">> /tmp/openssh_error_log",
-#     level => $ERROR,
-#   },
-#   {
-#     file  => "STDERR",
-#     level => $DEBUG,
-#   }
-# );
-# DEBUG("Debugging enabled...\n");
+#
+# Begin Subroutines
+#
 
 my $e = "=";
 sub pod_hash {
@@ -45,14 +41,14 @@ DOC
   description => <<DOC,
 Connect to Mikrotik RouterOS Device via OpenSSH to run ping commands.
 This probe uses the "ping" cli of the Mikrotik RouterOS.  You have
-the options to specify which interface the ping is sourced from, which
-routing table to use and multiplexd ssh connections.
+options to specify which interface the ping is sourced from, which
+routing table to use and multiplexd ssh connections, as well as others.
 DOC
   notes => <<DOC,
 ${e}head2 Mikrotik RouterOS configuration
 
 The Mikrotik RouterOS device should have a username/password configured, and
-the ssh server must not be disabled.
+the ssh server must not be disabled.  You can use a non standard port.
 
 Make sure to connect to the remote host once from the command line as the
 user who is running smokeping. On the first connect ssh will ask to add the
@@ -72,8 +68,9 @@ which itself is
 based on L<Smokeping::probes::TelnetJunOSPing> by S H A N E<lt>shanali@yahoo.comE<gt>.
 
 Additional Credits:
-  Routing Table option - https://github.com/leostereo  Leandro contribuited suggestions and code
-  to be able to specify a specific routing table.  Thank you
+  Routing Table option - https://github.com/leostereo  Leandro needed to be able to specify
+  a specific routing table.  Leandro contribuited code suggestions to enable this
+  functionality
 DOC
   }
 }
@@ -94,6 +91,31 @@ sub ProbeDesc($){
   return "Mikrotik RouterOS - ICMP Echo Pings ($bytes Bytes)";
 }
 
+# Generate a random string to use a debug log thread key
+sub gen_debug_key(){
+	my @set = ('0' ..'9', 'A' .. 'F');
+	my $str = join '' => map $set[rand @set], 1 .. 10;
+  return $str;
+}
+
+# Check for existing multiplex configuration
+sub check_for_multiplex_config($) {
+  my $user_home_dir = shift;
+  my @files = ("/etc/ssh/config", "/etc/ssh/ssh_config", "$user_home_dir/.ssh/config");
+  foreach my $conffile (@files) {
+    foreach my $file ($conffile) {
+      open my $fh, '<:encoding(UTF-8)', $file or warn;
+      while (my $line = <$fh>) {
+        if ($line =~ /^\s+ControlMaster\s+(yes|auto)/) {
+          if ( $debug ) {
+            DEBUG("$debug_key: WARNING! $file contains a ControlMaster config entry!  This may conflict with or override the Probe OpenSSHMikrotikRouterOSPing config!")
+          }
+        }
+      }
+    }
+  }
+}
+
 sub pingone ($$){
   my $self = shift;
   my $target = shift;
@@ -104,29 +126,39 @@ sub pingone ($$){
   my $dest = $target->{vars}{host};
   my $psource = $target->{vars}{psource};
   my $bytes = $self->{properties}{packetsize};
+  my $pings = $self->pings($target);
   my $rtable = $self->{vars}{rtable};
+  my $interface = $target->{vars}{interface};
+  my $dscp = $target->{vars}{dscp_id};
+  my $ttl = $target->{vars}{ttl};
+  my $do_not_fragment = $target->{vars}{do_not_fragment};
   my $ssh_cmd = $target->{vars}{ssh_binary_path};
   my $multiplex_ssh = $target->{vars}{multiplex_ssh};
+  $multiplex_control_socket_path = $target->{vars}{multiplex_control_socket_path};
   my $multiplex_control_persist_time = $target->{vars}{multiplex_control_persist_time};
-  my $multiplex_control_socket_path = $target->{vars}{multiplex_control_socket_path};
-  my $pings = $self->pings($target);
+  $debug = $target->{vars}{debug};
+  my $debug_logfile = $target->{vars}{debug_logfile};
 
-  # Try and determine script user in order to determine /home dir location for
-  # Master Control Socket file
-  my $script_user = $ENV{LOGNAME} || $ENV{USER} || getpwuid($<);
-  my $script_user_home_dir = (getpwuid $>)[7];
+  # If Debugging enabled
+  $debug_key = gen_debug_key;
+  if ( $debug ) {
+    use Data::Dumper;
 
-  # TODO (Add automatic home dir, tests, and fallback dir)
-  my $master_control_socket_dir = $multiplex_control_socket_path ? $multiplex_control_socket_path : "$script_user_home_dir/.libnet-openssh-perl";
-  my $master_control_socket_file = 'control-smokeping@' . $host;
-  my $master_control_socket_path_file = "$master_control_socket_dir/$master_control_socket_file";
-  $multiplex_control_persist_time = $multiplex_control_persist_time ? "$multiplex_control_persist_time" . "m" : ();
+    use Log::Log4perl qw(:easy);
+    Log::Log4perl->easy_init(
+      {
+        file  => ">> $debug_logfile",
+        level => $ERROR,
+      },
+      {
+        file  => "STDERR",
+        level => $DEBUG,
+      }
+    );
+    DEBUG("$debug_key: Debugging enabled...\n");
+  }
 
-  # do NOT call superclass ... the ping method MUST be overwriten
-  my %upd;
-  my @args = ();
-
-  #  Define the base SSH connection options to pass to the Net::OpenSSH->new() connection method
+  # Define the base SSH connection options to pass to the Net::OpenSSH->new() connection method
   my %opts = (
     "user" => $login ? $login : (),
     "password" => $password ? $password : (),
@@ -136,24 +168,53 @@ sub pingone ($$){
     "ssh_cmd" => $ssh_cmd
   );
 
-  # # DEBUG
-  # $Net::OpenSSH::debug = -1;
+  # If multiplex ssh is enabled
+  if ( $multiplex_ssh ){
+    if ( $debug ) {
+      DEBUG("$debug_key: Using OpenSSH ControlMaster Multiplex connections!\n");
+    }
 
-  my $ssh;
+    # Try and determine user executing script user in order to determine /home dir location for
+    # Master Control Socket file
+    my $script_user = $ENV{LOGNAME} || $ENV{USER} || getpwuid($<);
+    my $script_user_home_dir = (getpwuid $>)[7];
 
-  # If multiplex_ssh connection is true/1, add necessary additional params to options hash
-  if ( $multiplex_ssh ) {
-    # $self->do_log("Using OpenSSH ControlMaster Multiplex connections!\n");
+    check_for_multiplex_config($script_user_home_dir);
+
+    # Set master control path and filename vars now that we know $USER home dir
+    $master_control_socket_dir = $multiplex_control_socket_path ? $multiplex_control_socket_path : "$script_user_home_dir/.libnet-openssh-perl";
+    $master_control_socket_file = 'control-smokeping@' . $host;
+    $master_control_socket_path_file = "$master_control_socket_dir/$master_control_socket_file";
+    $multiplex_control_persist_time = $multiplex_control_persist_time ? "$multiplex_control_persist_time" . "m" : ();
+
+    # Ensure master control socket path exists and set permissions
+    if (-d $master_control_socket_dir) {
+      # Path exists, nothing to do
+    } else {
+      if ( $debug ) {
+        DEBUG("$debug_key: Multiplex control socket file path: [$master_control_socket_dir] does not exist!  Creating...");
+        # Path does not exist, create and set permissions
+        `mkdir -p $master_control_socket_dir`;
+        `chown -R $script_user:$script_user $master_control_socket_dir`;
+        `chmod -R 0744 $master_control_socket_dir`;
+        DEBUG("$debug_key: Multiplex control socket file path created and premissions set!");
+      }
+    }
+
     if(-e $master_control_socket_path_file){
       # If a multiplex connection socket has already been created, use it
-      # $self->do_log("Master Control Socket file: $master_control_socket_path_file exists... Using.\n");
+      if ( $debug ) {
+        DEBUG("$debug_key: Master Control Socket file: $master_control_socket_path_file exists... Using.\n");
+      }
 
       # Append options hash to use existing multiplex control socket
       $opts{'external_master'} = 1;
       $opts{'ctl_path'} = $master_control_socket_path_file;
     } else {
       # No multiplex connection socket has been created for this host, so create one
-      # $self->do_log("Master Control Socket file: $master_control_socket_path_file does not exist!  Creating new socket file.\n");
+      if ( $debug ) {
+        DEBUG("$debug_key: Master Control Socket file: $master_control_socket_path_file does not exist!  Creating new socket file.\n");
+      }
 
       # Append options hash to create a multiplex control socket
       $opts{'ctl_dir'} = $master_control_socket_dir;
@@ -164,27 +225,35 @@ sub pingone ($$){
     # $self->do_log("Not using OpenSSH ControlMaster Multiplex connections!\n");
   }
 
-  # # Debug - Show Options Hash
-  # $self->do_log(Dumper \%opts);
+  # # DEBUG
+  # $Net::OpenSSH::debug = -1;
+
+  # Debug - Show SSH Options Hash
+  if ( $debug ) {
+    my $resp = Dumper \%opts;
+    DEBUG("$debug_key: Net::OpenSSH->new options:\n$resp");
+  }
 
   # Connect to source host
-  $ssh = Net::OpenSSH->new(
+  my $ssh = Net::OpenSSH->new(
     $host, %opts
   );
 
+  # Return to caller if SSH connection error
   if ($ssh->error) {
     $self->do_log( "OpenSSHMikrotikRouterOSPing connecting $host: ".$ssh->error );
     return ();
   };
-
-  # # Debug
-  # $self->do_log("ping $dest count=$pings size=$bytes src-address=$psource");
 
   # Build ping command
   my $ping_command = "ping $dest";
 
   if ( $psource ) {
     $ping_command .= " src-address=$psource";
+  }
+
+  if ( $interface ) {
+    $ping_command .= " interface=$interface";
   }
 
   if ( $pings ) {
@@ -199,7 +268,24 @@ sub pingone ($$){
     $ping_command .= " routing-table=$rtable";
   }
 
+  if ( $dscp ) {
+    $ping_command .= " dscp=$dscp";
+  }
+
+  if ( $ttl ) {
+    $ping_command .= " ttl=$ttl";
+  }
+
+  if ( $do_not_fragment ) {
+    $ping_command .= " do-not-fragment";
+  }
+
   $ping_command .= "\n";
+
+  # Debug - Show ping command
+  if ( $debug ) {
+    DEBUG("$debug_key: $ping_command");
+  }
 
   # Execute the ping command on the source/host and capture the response
   my @output = ();
@@ -210,13 +296,16 @@ sub pingone ($$){
     return ();
   };
 
-  # # Debug
-  # $self->do_log('========== Ping response ==========' . "\n");
-  # $self->do_log(Dumper \@output);
+  # Debug
+  if ( $debug ) {
+    my $resp = join("$debug_key: ", @output);
+    DEBUG("$debug_key: ========== Ping response ==========\n$resp\n");
+  }
 
   # Process the ping response
   my @times = ();
 
+  # Parse the ping latency values
   while (@output) {
     my $outputline = shift @output;
     chomp($outputline);
@@ -227,21 +316,22 @@ sub pingone ($$){
   # Convert the ping times values to RRD format
   @times = map {sprintf "%.10e", $_ / $self->{pingfactor}} sort {$a <=> $b} @times;
   
-  # Ensure the number of pings requested returned by @tumes are equal to the
+  # Ensure the number of pings returned in @tumes are equal to the
   # configured number of pings defined in the host definition.  Any value
-  # other than the number defined in the RRD format will cause the update
+  # other than the number defined in the RRD format will cause the RRD update
   # to fail
   my $length = @times;
   while (($length = @times) > 20) {
-    $self->do_log('@times length: ' . $length . "\n");
     pop @times;
   }
 
-  # # Debug
-  # $self->do_log('@times:');
-  # $self->do_log(Dumper \@times);
-  # my $length = @times;
-  # $self->do_log("Length of times: $length");
+  # Debug
+  if ( $debug ) {
+    my $resp = Dumper \@times;
+#    my $resp = join("$debug_key:", @times);
+    my $length = @times;
+    DEBUG("$debug_key: \@times result: length[$length]\n$resp\n");
+  }
 
   return @times;
 }
@@ -275,12 +365,16 @@ sub targetvars {
   my $h = $class->SUPER::targetvars;
   delete $h->{pings};
 
+  # Find and set default master control socket path if not user defined
+  my $script_user_home_dir = (getpwuid $>)[7];
+  my $default_socket_dir = $script_user_home_dir ? $script_user_home_dir : "/tmp/smokeping_ssh_sockets";
+
   # Define the parameters/options
   my $params = {
     _mandatory => [ 'routerosuser', 'routerospass', 'source' ],
     source => {
       _doc => <<DOC,
-The source option specifies the Mikrotik RouterOS device that is going to run
+The (manditory) source option specifies the Mikrotik RouterOS device that is going to run
 the ping commands.  This address will be used for the ssh connection.
 DOC
       _example => "192.168.2.1",
@@ -302,14 +396,14 @@ DOC
     },
     routerosuser => {
       _doc => <<DOC,
-The routerosuser option allows you to specify the SSH login username and 
+The (manditory) routerosuser option allows you to specify the SSH login username 
 that has ping capability on the Mikrotik RouterOS Device.
 DOC
       _example => 'user',
     },
     routerospass => {
       _doc => <<DOC,
-The routerospass option allows you to specify the SSH login password.
+The (manditory) routerospass option allows you to specify the SSH login password.
 DOC
       _example => 'password',
     },
@@ -318,13 +412,12 @@ DOC
 The (optional) rtable option lets you specify the routing table to use in the
 ping command.
 DOC
-    _default => ''
+    _example => 'secondary_route'
     },
     pings => {
       _doc => <<DOC,
-The (optional) pings option lets you configure the number of pings for
-the pings sent.  A reasonable max value is 20.  However, a max value of 50
-allowed.
+The (optional) pings option lets you specify the number of pings sent.
+A reasonable max value is 20.  However, a max value of 50 is allowed.
 DOC
       _default => 20,
       _re => '\d+',
@@ -334,7 +427,59 @@ DOC
           unless $val >= 1 and $val <= 50;
         return undef;
       },
+      _example => "20"
+    },
+    interface => {
+      _doc => <<DOC,
+The (optional) interface option lets you specify the name of the interface
+to source pings.
+DOC
+      _example => 'ether1'
+    },
+    ttl => {
+      _doc => <<DOC,
+The (optional) ttl option lets you specify the Time to Live value for
+the pings sent.  A reasonable max value is 20.  However, a max value of 255
+allowed.
+DOC
+      _default => 20,
+      _re => '\d+',
+      _sub => sub {
+        my $val = shift;
+        return "ERROR: ttl value of $val is invalid.  Must be >= 1 and <= 255"
+          unless $val >= 1 and $val <= 255;
+        return undef;
+      },
       _example => "20",
+    },
+    dscp_id => {
+      _doc => <<DOC,
+The (optional) dscp_id option lets you specify the DSCP ID.
+DOC
+#      _default => ,
+      _re => '\d+',
+      _sub => sub {
+        my $val = shift;
+        return "ERROR: dscp value of $val is invalid.  Must be an integer"
+          unless $val >= 1 and $val <= 65000;
+        return undef;
+      },
+      _example => 20,
+    },
+    do_not_fragment => {
+      _doc => <<DOC,
+The (optional) do_not_fragment option lets you specify the do-not-fragment flag.
+If the flag is set packets will not be fragmented if size exceeds interface mtu.
+DOC
+      _default => 'false',
+      _re => '\w+',
+      _sub => sub {
+        my $val = shift;
+        return "ERROR: do_not_fragment value of $val is invalid.  Must be true or false"
+          unless $val == 'true' or $val == 'false';
+        return undef;
+      },
+      _example => 'true',
     },
     ssh_port => {
       _doc => <<DOC,
@@ -355,23 +500,29 @@ DOC
     },
     multiplex_ssh => {
       _doc => <<DOC,
-The (optional) multiplex_ssh option lets you configure Net::OpenSSH to use multiplexed
-ssh connections.  i.e. reuse the same SSH connection to a host.  Default is enabled (=1)
+The (optional) multiplex_ssh option lets you specify whether to use multiplexed
+ssh connections, i.e. reuse the same SSH connection to a host.  Default is enabled
 DOC
-      _default => 1, # True
-      _re => '\d+',
+      _default => 'true',
+      _re => '\w+',
       _sub => sub {
         my $val = shift;
-        return "ERROR: multiplex_ssh value of $val is invalid.  Must be 0 for false, 1 for true"
-          unless $val == 0 or $val == 1;
+        return "ERROR: multiplex_ssh value of $val is invalid.  Must be true or false"
+          unless $val == 'true' or $val == 'false';
         return undef;
       },
-      _example => 1
+      _example => 'false'
     },
     multiplex_control_persist_time => {
       _doc => <<DOC,
-The (optional) multiplex_control_persist_time ssh option lets you configure how
-long to persist the multiplex or Master Control Socket file 
+The (optional) multiplex_control_persist_time option lets you specify how
+long to persist the multiplex or Master Control Socket.  ControlMaster sockets
+are removed automatically when the master connection has ended. If
+multiplex_control_persist_time is set to 0, the master connection open
+will be left open in the background to accept new connections until killed
+explicitly or ends at a pre-defined timeout.  If multiplex_control_persist_time
+is set to a time, then it will leave the master connection open for the
+designated time or until the last multiplexed session is closed, whichever is longer.
 DOC
       _default => 10, # 10 Min
       _re => '\d+',
@@ -385,11 +536,33 @@ DOC
     },
     multiplex_control_socket_path => {
       _doc => <<DOC,
-The (optional) multiplex_control_persist_time ssh option lets you configure how
-long to persist the multiplex or Master Control Socket file 
+The (optional) multiplex_control_socket_path ssh option lets you specify the
+master control socket path
 DOC
-      _default => "~/.libnet-openssh-perl",
+      _default => $default_socket_dir . "/.libnet-openssh-perl",
       _example => "/tmp/smokeping_ssh_sockets"
+    },
+    debug => {
+      _doc => <<DOC,
+The (optional) debug option lets you configure probe or target specific
+debugging.
+DOC
+      _default => 'false',
+      _re => '\w+',
+      _sub => sub {
+        my $val = shift;
+        return "ERROR: debug option value of $val is invalid.  Must be true or false"
+          unless $val == 'true' or $val == 'false';
+        return undef;
+      },
+      _example => 'true'
+    },
+    debug_logfile => {
+      _doc => <<DOC,
+The (optional) debug_logfile option lets you specify the debug logifile
+DOC
+      _default => "/tmp/smokeping_debug.log",
+      _example => "/tmp/my_debug.log"
     }
   };
 
