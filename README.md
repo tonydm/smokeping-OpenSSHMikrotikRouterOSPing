@@ -223,7 +223,7 @@ multiplex_control_persist_time = 20 # Override to use 20 minutes
 ```
 
 ### Manpage Documentation
-[Manpage](https://github.com/tonydm/smokeping-OpenSSHMikrotikRouterOSPing/blob/master/MANPAGE.doc)
+[Manpage](https://github.com/tonydm/smokeping-OpenSSHMikrotikRouterOSPing/blob/master/MANPAGE.md)
 
 ### Bugs
 
