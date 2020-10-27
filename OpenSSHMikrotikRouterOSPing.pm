@@ -99,6 +99,7 @@ sub gen_debug_key(){
 }
 
 # Check for existing multiplex configuration
+# in know locations
 sub check_for_multiplex_config($) {
   my $user_home_dir = shift;
   my @files = ("/etc/ssh/config", "/etc/ssh/ssh_config", "$user_home_dir/.ssh/config");
@@ -127,9 +128,9 @@ sub pingone ($$){
   my $psource = $target->{vars}{psource};
   my $bytes = $self->{properties}{packetsize};
   my $pings = $self->pings($target);
-  my $rtable = $self->{vars}{rtable};
+  my $rtable = $target->{vars}{rtable};
   my $interface = $target->{vars}{interface};
-  my $dscp = $target->{vars}{dscp_id};
+  my $dscp_id = $target->{vars}{dscp_id};
   my $ttl = $target->{vars}{ttl};
   my $do_not_fragment = $target->{vars}{do_not_fragment};
   my $ssh_cmd = $target->{vars}{ssh_binary_path};
@@ -138,6 +139,12 @@ sub pingone ($$){
   my $multiplex_control_persist_time = $target->{vars}{multiplex_control_persist_time};
   $debug = $target->{vars}{debug};
   my $debug_logfile = $target->{vars}{debug_logfile};
+
+  # Handle true/false strings for options params since perl does
+  # not have true/false boolean operators
+  $multiplex_ssh = ($multiplex_ssh eq 'true') ? 1 : undef;
+  $debug = ($debug eq 'true') ? 1 : undef;
+  $do_not_fragment = ($do_not_fragment eq 'true') ? 1 : undef;
 
   # If Debugging enabled
   $debug_key = gen_debug_key;
@@ -187,12 +194,12 @@ sub pingone ($$){
     $master_control_socket_path_file = "$master_control_socket_dir/$master_control_socket_file";
     $multiplex_control_persist_time = $multiplex_control_persist_time ? "$multiplex_control_persist_time" . "m" : ();
 
-    # Ensure master control socket path exists and set permissions
     if (-d $master_control_socket_dir) {
       # Path exists, nothing to do
     } else {
       if ( $debug ) {
         DEBUG("$debug_key: Multiplex control socket file path: [$master_control_socket_dir] does not exist!  Creating...");
+        # Ensure master control socket path exists and set permissions
         # Path does not exist, create and set permissions
         `mkdir -p $master_control_socket_dir`;
         `chown -R $script_user:$script_user $master_control_socket_dir`;
@@ -268,11 +275,11 @@ sub pingone ($$){
     $ping_command .= " routing-table=$rtable";
   }
 
-  if ( $dscp ) {
-    $ping_command .= " dscp=$dscp";
+  if ( $dscp_id ) {
+    $ping_command .= " dscp=$dscp_id";
   }
 
-  if ( $ttl ) {
+  if ( $ttl && $ttl != 64 ) {
     $ping_command .= " ttl=$ttl";
   }
 
@@ -328,7 +335,6 @@ sub pingone ($$){
   # Debug
   if ( $debug ) {
     my $resp = Dumper \@times;
-#    my $resp = join("$debug_key:", @times);
     my $length = @times;
     DEBUG("$debug_key: \@times result: length[$length]\n$resp\n");
   }
@@ -439,10 +445,9 @@ DOC
     ttl => {
       _doc => <<DOC,
 The (optional) ttl option lets you specify the Time to Live value for
-the pings sent.  A reasonable max value is 20.  However, a max value of 255
-allowed.
+the pings sent.  Default is 64.
 DOC
-      _default => 20,
+      # _default => 64,
       _re => '\d+',
       _sub => sub {
         my $val = shift;
@@ -460,8 +465,8 @@ DOC
       _re => '\d+',
       _sub => sub {
         my $val = shift;
-        return "ERROR: dscp value of $val is invalid.  Must be an integer"
-          unless $val >= 1 and $val <= 65000;
+        return "ERROR: dscp value of $val is invalid.  Must be an integer between 1 and 63."
+          unless $val >= 1 and $val <= 63;
         return undef;
       },
       _example => 20,
@@ -501,7 +506,7 @@ DOC
     multiplex_ssh => {
       _doc => <<DOC,
 The (optional) multiplex_ssh option lets you specify whether to use multiplexed
-ssh connections, i.e. reuse the same SSH connection to a host.  Default is enabled
+ssh connections, i.e. reuse the same SSH connection to a host.
 DOC
       _default => 'true',
       _re => '\w+',
@@ -515,10 +520,10 @@ DOC
     },
     multiplex_control_persist_time => {
       _doc => <<DOC,
-The (optional) multiplex_control_persist_time option lets you specify how
-long to persist the multiplex or Master Control Socket.  ControlMaster sockets
-are removed automatically when the master connection has ended. If
-multiplex_control_persist_time is set to 0, the master connection open
+The (optional) multiplex_control_persist_time option lets you specify, in
+minutes, how long to persist the multiplex or Master Control Socket.
+ControlMaster sockets are removed automatically when the master connection
+has ended. If multiplex_control_persist_time is set to 0, the master connection open
 will be left open in the background to accept new connections until killed
 explicitly or ends at a pre-defined timeout.  If multiplex_control_persist_time
 is set to a time, then it will leave the master connection open for the
@@ -532,7 +537,7 @@ DOC
           unless $val >= 1 and $val <= 1000;
         return undef;
       },
-      _example => "10"
+      _example => 20
     },
     multiplex_control_socket_path => {
       _doc => <<DOC,
@@ -562,7 +567,7 @@ DOC
 The (optional) debug_logfile option lets you specify the debug logifile
 DOC
       _default => "/tmp/smokeping_debug.log",
-      _example => "/tmp/my_debug.log"
+      _example => "/tmp/my_debug.log or /tmp/smokeping_target1.log"
     }
   };
 

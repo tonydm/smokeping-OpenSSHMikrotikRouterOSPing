@@ -44,7 +44,7 @@ I wanted a probe to connect to Mikrotik RouterOS devices via SSH. So I created t
     - debian dist - run: [sudo] apt install openssh-client
 
   #### For debugging
-  - Data::Dumper;
+  - Data::Dumper
   - Log::Log4perl
   
 ### Supports
@@ -54,17 +54,17 @@ I wanted a probe to connect to Mikrotik RouterOS devices via SSH. So I created t
 - Interface Name
 - Host IP or FQDN.  (FQDN if DNS is enabled on Mikrotik Router)
 - Packet Size
-- Target Ping Count (Default: 20, MAX: 50)
+- Target Ping Count
 - Routing Table Name
 - Time to Live
 - DSCP ID
 - Do Not Fragment flag
-- Target Host SSH Port (Default: 22 or Non-Standard)
+- Target Host SSH Port (Standard or Non-Standard)
 - User defined openssh-client path (/usr/bin/ssh)
-- Multiplexed SSH Connections (Enabled by default)
-  - User defined SSH Control Socket File Path (Default: ~/.libnet-openssh-perl)
-  - User defined SSH Control Socket Persist Timeout (Default: 10 min)
-- Separate Debug Output from Smokeping's debugging
+- Multiplexed SSH Connections
+  - User defined SSH Control Socket File Path
+  - User defined SSH Control Socket Persist Timeout
+- Target specific debug output
   - Specify user defined output file and location
 
 ### Multiplexed SSH Connections
@@ -152,10 +152,11 @@ pings = 20
 routerospass = <userpass>
 routerosuser = <username>
 # ssh_binary_path = /usr/bin/ssh
-multiplex_ssh = true
+multiplex_ssh = true # Default
 # multiplex_control_persist_time = 10 # Default is 10 min.  A value of 0 will leave socket file indefinitely
 # multiplex_control_file_path = ~/.libnet-openssh-perl # Default
 debug = false # Default
+debug_logfile = /tmp/smokeping_openssh_mtik.log
 ```
 
 #### Targets file (Sample Configs)
@@ -175,9 +176,9 @@ title = speedtest-nyc1.digitalocean.com (DigitalOcean New York 1)
 host = speedtest-nyc1.digitalocean.com
 # source - uses parent defined
 # psource - uses parent defined
-rtable = <routing table name>
+rtable = secondary_wan
 # multiplex_ssh = true # Default
-multiplex_control_file_path = <user defined path>
+multiplex_control_file_path = /tmp/smokeping_ssh_sockets
 multiplex_control_persist_time = 0 # Indefinitely
 debug = true
 
@@ -196,6 +197,7 @@ source = <remoterouter1_WAN_IP_Address>
 host = <IP_of_interest>
 ssh_port = 22431
 debug = true
+debug_logfile = /tmp/smokeping_remote_router1.log
 
 ++ remote_router2
 title = Remote Router2
@@ -204,7 +206,7 @@ psource = <some_other_IP_address_on_remote_router>
 host = <IP_of_interest>
 rtable = <name_of_routing_table_other_than_main>
 ssh_port = 29437
-multiplex_ssh = false # Don't use multiplexed ssh connections - but why would you want to
+multiplex_ssh = false # Don't use multiplexed ssh connections - but why would you not want to
 
 ++ remote_router3
 title = Remote Router3
@@ -221,210 +223,7 @@ multiplex_control_persist_time = 20 # Override to use 20 minutes
 ```
 
 ### Manpage Documentation
-```
-# smokeping -man Smokeping::probes::OpenSSHMikrotikRouterOSPing
-
-Supported probe-specific variables:
-
-  forks
-      Run this many concurrent processes at maximum
-
-      Example value: 5
-
-      Default value: 5
-
-  offset
-      If you run many probes concurrently you may want to prevent them
-      from hitting your network all at the same time. Using the
-      probe-specific offset parameter you can change the point in time
-      when each probe will be run. Offset is specified in % of total
-      interval, or alternatively as 'random', and the offset from the
-      'General' section is used if nothing is specified here. Note that
-      this does NOT influence the rrds itself, it is just a matter of when
-      data acqusition is initiated. (This variable is only applicable if
-      the variable 'concurrentprobes' is set in the 'General' section.)
-
-      Example value: 50%
-
-  packetsize
-      The (optional) packetsize option lets you configure the packetsize
-      for the pings sent. You cannot ping with packets larger than the MTU
-      of the source interface, so the packet size should always be equal
-      to or less than the MTU on the interface. MTU size can vary on each
-      model of the Mikrotik RouterBoard. Reference your model for
-      appropriate values if you wish to override.
-
-      Default value: 56
-
-  step
-      Duration of the base interval that this probe should use, if
-      different from the one specified in the 'Database' section. Note
-      that the step in the RRD files is fixed when they are originally
-      generated, and if you change the step parameter afterwards, you'll
-      have to delete the old RRD files or somehow convert them. (This
-      variable is only applicable if the variable 'concurrentprobes' is
-      set in the 'General' section.)
-
-      Example value: 300
-
-  timeout
-      How long a single 'ping' takes at maximum
-
-      Example value: 15
-
-      Default value: 5
-
-  Supported target-specific variables:
-
-  debug
-      The (optional) debug option lets you configure probe or target specific
-      debugging.
-
-      Example value: true
-
-      Default value: false
-
-  debug_logfile
-      The (optional) debug_logfile option lets you specify the debug
-      logifile
-
-      Example value: /tmp/my_debug.log
-
-      Default value: /tmp/smokeping_debug.log
-
-  do_not_fragment
-      The (optional) do_not_fragment option lets you specify the
-      do-not-fragment flag. If the flag is set packets will not be
-      fragmented if size exceeds interface mtu.
-
-      Example value: true
-
-      Default value: false
-
-  dscp_id
-      The (optional) dscp_id option lets you specify the DSCP ID.
-
-      Example value: 20
-
-  interface
-      The (optional) interface option lets you specify the name of the
-      interface to source pings.
-
-      Example value: ether1
-
-  multiplex_ssh
-      The (optional) multiplex_ssh option lets you specify whether to use
-      multiplexed ssh connections, i.e. reuse the same SSH connection to a
-      host. Default is enabled
-
-      Example value: false
-
-      Default value: true
-
-  multiplex_control_socket_path
-      The (optional) multiplex_control_socket_path ssh option lets you
-      specify the master control socket path
-
-      Example value: /tmp/smokeping_ssh_sockets
-
-      Default value: ~/.libnet-openssh-perl
-
-  multiplex_control_persist_time
-      The (optional) multiplex_control_persist_time option lets you specify how
-      long to persist the multiplex or Master Control Socket.  ControlMaster sockets
-      are removed automatically when the master connection has ended. If
-      multiplex_control_persist_time is set to 0, the master connection open
-      will be left open in the background to accept new connections until killed
-      explicitly or ends at a pre-defined timeout.  If multiplex_control_persist_time
-      is set to a time, then it will leave the master connection open for the
-      designated time or until the last multiplexed session is closed, whichever is longer.
-
-      Example value: 0
-
-      Default value: 10
-
-  pings
-      The (optional) pings option lets you specify the number of pings
-      sent. A reasonable max value is 20. However, a max value of 50 is
-      allowed.
-
-      Example value: 20
-
-      Default value: 20
-
-  psource
-      The (optional) psource option specifies an alternate IP address or
-      Interface from which you wish to source your pings from. Mikrotik
-      routers can have many many IP addresses, and interfaces. When you
-      ping from a router you have the ability to choose which interface
-      and/or which IP address the ping is sourced from. Specifying an
-      IP/interface does not necessarily specify the interface from which
-      the ping will leave, but will specify which address the packet(s)
-      appear to come from. If this option is left out the Mikrotik
-      RouterOS Device will source the packet automatically based on
-      routing and/or metrics. If this doesn't make sense to you then just
-      leave it out.
-
-      Example value: 192.168.2.129
-
-  routerospass
-      The (manditory) routerospass option allows you to specify the SSH
-      login password.
-
-      Example value: password
-
-      This setting is mandatory.
-
-  routerosuser
-      The (manditory) routerosuser option allows you to specify the SSH
-      login username that has ping capability on the Mikrotik RouterOS
-      Device.
-
-      Example value: user
-
-      This setting is mandatory.
-
-  rtable
-      The (optional) rtable option lets you specify the routing table to
-      use in the ping command.
-
-      Example value: secondary_route
-
-  source
-      The (manditory) source option specifies the Mikrotik RouterOS device
-      that is going to run the ping commands. This address will be used
-      for the ssh connection.
-
-      Example value: 192.168.2.1
-
-      This setting is mandatory.
-
-  ssh_binary_path
-      The (optional) ssh_binary_path option lets you specify the path for
-      the ssh client binary. This option will specify the path to the
-      Net::OpenSSH host connector. It may be necessary to define the path
-      to the binary if it is not found in the $PATH.
-
-      Example value: /usr/bin/ssh
-
-      Default value: /usr/bin/ssh
-
-  ssh_port
-      The (optional) ssh_port option lets you specify a non standard SSH
-      port.
-
-      Example value: 22431
-
-      Default value: 22
-
-  ttl The (optional) ttl option lets you specify the Time to Live value
-      for the pings sent. A reasonable max value is 20. However, a max
-      value of 255 allowed.
-
-      Example value: 20
-
-      Default value: 20
-```
+[Manpage](https://github.com/tonydm/smokeping-OpenSSHMikrotikRouterOSPing/blob/master/MANPAGE.doc)
 
 ### Bugs
 
