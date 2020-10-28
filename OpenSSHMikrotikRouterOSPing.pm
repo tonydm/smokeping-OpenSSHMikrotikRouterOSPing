@@ -91,7 +91,7 @@ sub ProbeDesc($){
   return "Mikrotik RouterOS - ICMP Echo Pings ($bytes Bytes)";
 }
 
-# Generate a random string to use a debug log thread key
+# Generate a random string to use as a debug log thread key
 sub gen_debug_key(){
 	my @set = ('0' ..'9', 'A' .. 'F');
 	my $str = join '' => map $set[rand @set], 1 .. 10;
@@ -105,9 +105,9 @@ sub check_for_multiplex_config($) {
   my @files = ("/etc/ssh/config", "/etc/ssh/ssh_config", "$user_home_dir/.ssh/config");
   foreach my $conffile (@files) {
     foreach my $file ($conffile) {
-      open my $fh, '<:encoding(UTF-8)', $file or warn;
+      open my $fh, $file || warn $!;
       while (my $line = <$fh>) {
-        if ($line =~ /^\s+ControlMaster\s+(yes|auto)/) {
+        if ($line =~ /^\s+ControlMaster\s+(yes|no|ask|auto)/) {
           if ( $debug ) {
             DEBUG("$debug_key: WARNING! $file contains a ControlMaster config entry!  This may conflict with or override the Probe OpenSSHMikrotikRouterOSPing config!")
           }
