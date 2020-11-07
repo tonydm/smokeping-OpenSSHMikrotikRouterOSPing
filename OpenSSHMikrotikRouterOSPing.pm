@@ -91,7 +91,7 @@ sub ProbeDesc($){
   return "Mikrotik RouterOS - ICMP Echo Pings ($bytes Bytes)";
 }
 
-# Generate a random string to use as a debug log thread key
+# Generate a random string to use a debug log thread key
 sub gen_debug_key(){
 	my @set = ('0' ..'9', 'A' .. 'F');
 	my $str = join '' => map $set[rand @set], 1 .. 10;
@@ -105,7 +105,7 @@ sub check_for_multiplex_config($) {
   my @files = ("/etc/ssh/config", "/etc/ssh/ssh_config", "$user_home_dir/.ssh/config");
   foreach my $conffile (@files) {
     foreach my $file ($conffile) {
-      open my $fh, $file || warn $!;
+  		open my $fh, $file || warn $!;  
       while (my $line = <$fh>) {
         if ($line =~ /^\s+ControlMaster\s+(yes|no|ask|auto)/) {
           if ( $debug ) {
@@ -117,6 +117,7 @@ sub check_for_multiplex_config($) {
   }
 }
 
+# Where the magic happens
 sub pingone ($$){
   my $self = shift;
   my $target = shift;
@@ -139,12 +140,14 @@ sub pingone ($$){
   my $multiplex_control_persist_time = $target->{vars}{multiplex_control_persist_time};
   $debug = $target->{vars}{debug};
   my $debug_logfile = $target->{vars}{debug_logfile};
+  my $debug_ssh = $target->{vars}{debug_ssh};
 
   # Handle true/false strings for options params since perl does
   # not have true/false boolean operators
   $multiplex_ssh = ($multiplex_ssh eq 'true') ? 1 : undef;
-  $debug = ($debug eq 'true') ? 1 : undef;
   $do_not_fragment = ($do_not_fragment eq 'true') ? 1 : undef;
+  $debug = ($debug eq 'true') ? 1 : undef;
+  $debug_ssh = ($debug_ssh eq 'true') ? 1 : undef;
 
   # If Debugging enabled
   $debug_key = gen_debug_key;
@@ -208,7 +211,7 @@ sub pingone ($$){
       }
     }
 
-    if(-e $master_control_socket_path_file){
+    if( -e $master_control_socket_path_file ){
       # If a multiplex connection socket has already been created, use it
       if ( $debug ) {
         DEBUG("$debug_key: Master Control Socket file: $master_control_socket_path_file exists... Using.\n");
@@ -232,8 +235,11 @@ sub pingone ($$){
     # $self->do_log("Not using OpenSSH ControlMaster Multiplex connections!\n");
   }
 
-  # # DEBUG
-  # $Net::OpenSSH::debug = -1;
+  # DEBUG SSH Connection Detail
+  open my $ssh_debug_out, '>>', $debug_logfile || warn $!;
+  DEBUG("debug:-ssh: $debug_ssh") unless ( ! $debug_ssh );
+  $Net::OpenSSH::debug_fh = $ssh_debug_out unless ( ! $debug_ssh );
+  $Net::OpenSSH::debug = -1 unless ( ! $debug_ssh );
 
   # Debug - Show SSH Options Hash
   if ( $debug ) {
@@ -245,6 +251,10 @@ sub pingone ($$){
   my $ssh = Net::OpenSSH->new(
     $host, %opts
   );
+
+  if ( $debug_ssh ) {
+    DEBUG("SSH ERROR: " . $ssh->error );
+  }
 
   # Return to caller if SSH connection error
   if ($ssh->error) {
@@ -568,6 +578,21 @@ The (optional) debug_logfile option lets you specify the debug logifile
 DOC
       _default => "/tmp/smokeping_debug.log",
       _example => "/tmp/my_debug.log or /tmp/smokeping_target1.log"
+    },
+    debug_ssh => {
+      _doc => <<DOC,
+The (optional) debug option lets you configure probe or target specific
+ssh debugging.
+DOC
+      _default => 'false',
+      _re => '\w+',
+      _sub => sub {
+        my $val = shift;
+        return "ERROR: debug option value of $val is invalid.  Must be true or false"
+          unless $val == 'true' or $val == 'false';
+        return undef;
+      },
+      _example => 'true'
     }
   };
 
