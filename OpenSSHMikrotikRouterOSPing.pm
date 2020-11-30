@@ -202,11 +202,15 @@ sub pingone ($$){
     } else {
       if ( $debug ) {
         DEBUG("$debug_key: Multiplex control socket file path: [$master_control_socket_dir] does not exist!  Creating...");
-        # Ensure master control socket path exists and set permissions
-        # Path does not exist, create and set permissions
-        `mkdir -p $master_control_socket_dir`;
-        `chown -R $script_user:$script_user $master_control_socket_dir`;
-        `chmod -R 0744 $master_control_socket_dir`;
+      }
+      
+      # Ensure master control socket path exists and set permissions
+      # Path does not exist, create and set permissions
+      `mkdir -p $master_control_socket_dir`;
+      `chown -R $script_user:$script_user $master_control_socket_dir`;
+      `chmod -R 0744 $master_control_socket_dir`;
+
+      if ( $debug ) {
         DEBUG("$debug_key: Multiplex control socket file path created and premissions set!");
       }
     }
