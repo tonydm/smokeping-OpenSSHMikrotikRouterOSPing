@@ -10,3 +10,8 @@
 ### Version 1.4.2
 - Fixed issue where enabling debug_ssh caused probe to return to caller before
   completing ssh connection and command
+### Version 1.4.3
+- Fixed issue where if control socket path does not exist it would fail to be
+  created if debug = true was not set on target
+- Corrected documentation referring to Target Host SSH Port, should be Source
+  SSH POrt
