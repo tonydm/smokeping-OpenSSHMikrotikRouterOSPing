@@ -59,7 +59,7 @@ I wanted a probe to connect to Mikrotik RouterOS devices via SSH. So I created t
 - Time to Live
 - DSCP ID
 - Do Not Fragment flag
-- Target Host SSH Port (Standard or Non-Standard)
+- Source SSH Port (Standard or Non-Standard)
 - User defined openssh-client path (/usr/bin/ssh)
 - Multiplexed SSH Connections
   - User defined SSH Control Socket File Path
