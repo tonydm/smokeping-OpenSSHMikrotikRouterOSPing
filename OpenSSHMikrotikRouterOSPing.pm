@@ -331,7 +331,7 @@ sub pingone ($$){
     my $outputline = shift @output;
     chomp($outputline);
     next if ($outputline =~ m/(sent|recieved|packet\-loss|min\-rtt|avg\-rtt|max\-rtt)/);
-    $outputline =~ /(\d+)ms/ && push(@times,$1);
+    $outputline =~ /((\d+)ms(\d+)us|(\d+)ms|(\d+)us)/ && push(@times,($2?$2:"")+($4?$4:"")+($3?$3/1000:"")+($5?$5/1000:""));
   }
 
   # Convert the ping times values to RRD format
