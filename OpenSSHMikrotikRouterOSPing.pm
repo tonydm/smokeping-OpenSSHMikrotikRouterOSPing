@@ -230,10 +230,12 @@ sub pingone ($$){
         DEBUG("$debug_key: Master Control Socket file: $master_control_socket_path_file does not exist!  Creating new socket file.\n");
       }
 
+      my $openssh_detail = "-vvv" if $debug_ssh;
+
       # Append options hash to create a multiplex control socket
       $opts{'ctl_dir'} = $master_control_socket_dir;
       $opts{'ctl_path'} = $master_control_socket_path_file;
-      $opts{'master_opts'} = ["-oStrictHostKeyChecking=no", "-oControlPersist=$multiplex_control_persist_time", "-vvv"];
+      $opts{'master_opts'} = ["-oStrictHostKeyChecking=no", "-oControlPersist=$multiplex_control_persist_time", $openssh_detail];
     }
   } else {
     # $self->do_log("Not using OpenSSH ControlMaster Multiplex connections!\n");
