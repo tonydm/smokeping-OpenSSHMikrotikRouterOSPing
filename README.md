@@ -61,6 +61,10 @@ I wanted a probe to connect to Mikrotik RouterOS devices via SSH. So I created t
 - Do Not Fragment flag
 - Source SSH Port (Standard or Non-Standard)
 - User defined openssh-client path (/usr/bin/ssh)
+- SSH Key Authentication (with fallback to ssh-agent / default identity files)
+- Configurable SSH connect timeout (fail fast when router is unreachable)
+- Configurable SSH session timeout
+- Configurable SSH StrictHostKeyChecking policy (`yes` / `accept-new` / `no`)
 - Multiplexed SSH Connections
   - User defined SSH Control Socket File Path
   - User defined SSH Control Socket Persist Timeout
@@ -90,11 +94,82 @@ Multiplexing is the ability to send more than one signal over a single line or c
   
   ![Service2](https://github.com/tonydm/smokeping-OpenSSHMikrotikRouterOSPing/blob/master/screenshots/winbox-services-settings2.png)
 
+### SSH Key Authentication
+
+The probe supports three ways to authenticate to each Mikrotik target, chosen per-target:
+
+1. **Password** — set `routerospass` (the legacy default).
+2. **SSH key file** — set `ssh_key_path` to the private key path. `ssh_key_path` takes precedence over any `routerospass` inherited from the probe-level default, so individual targets can flip to key auth without having to unset `routerospass` on the parent probe.
+3. **ssh-agent / default identity files** — leave both `routerospass` and `ssh_key_path` unset. Net::OpenSSH invokes the system ssh client which picks up `SSH_AUTH_SOCK`, `~/.ssh/id_ed25519`, `~/.ssh/id_rsa`, etc. — handy for containerised smokeping deployments that mount an agent socket.
+
+If none of the three are configured the connection fails at runtime with a Net::OpenSSH authentication error in the smokeping log.
+
+#### Generating a key and uploading it to the router
+
+Run these on the smokeping host, as root (or the user who will run smokeping):
+
+```
+# 1. Generate an unencrypted ed25519 key dedicated to smokeping
+ssh-keygen -t ed25519 -f /etc/smokeping/id_ed25519 -N '' -C smokeping-probe
+
+# 2. Lock down permissions (ssh refuses keys that are group/world-readable)
+chown smokeping:smokeping /etc/smokeping/id_ed25519 /etc/smokeping/id_ed25519.pub
+chmod 0600 /etc/smokeping/id_ed25519
+chmod 0644 /etc/smokeping/id_ed25519.pub
+
+# 3. Copy the public key to the router (one-time; needs a user with enough permissions to write the file)
+scp /etc/smokeping/id_ed25519.pub admin@router.example.com:id_ed25519.pub
+```
+
+Then on the MikroTik router, as the admin or a user with `write` policy:
+
+```
+# 4. Associate the public key with the smokeping user account
+/user ssh-keys import public-key-file=id_ed25519.pub user=smokeping
+
+# 5. (Optional) Verify the key is registered
+/user ssh-keys print where user=smokeping
+```
+
+Finally verify end-to-end from the smokeping host, still as root or the smokeping user:
+
+```
+sudo -u smokeping ssh -i /etc/smokeping/id_ed25519 smokeping@router.example.com
+```
+
+You should land on the `[smokeping@MikroTik] >` prompt without being asked for a password. Type `quit` to exit.
+
+Once that works, set `ssh_key_path = /etc/smokeping/id_ed25519` on the relevant smokeping target(s) and unset `routerospass`.
+
+> If the router password doesn't allow you to scp in step 3 (some hardened configurations disable password auth on the router ssh before a key is imported), upload `id_ed25519.pub` via Winbox Files instead, then run step 4 as normal.
+
+#### Using ssh-agent instead
+
+If smokeping runs in a container that already has `SSH_AUTH_SOCK` forwarded from the host (or some orchestrator injects it), leave both `routerospass` and `ssh_key_path` unset on the target. Net::OpenSSH will invoke ssh, which will try the agent first. Confirm it works with:
+
+```
+sudo -u smokeping ssh smokeping@router.example.com
+```
+
+### Debugging
+
+Setting `debug = true` on a target emits a richer log to `debug_logfile` (default `/tmp/smokeping_debug.log`). Each probe cycle produces:
+
+- A `cycle start` line with the effective config snapshot (host, dest, user, auth method, multiplex, timeouts, strict-host-key policy).
+- The full composed ssh command the probe will execute — copy-paste this as the smokeping user to reproduce connection failures manually.
+- The raw ping response from the router.
+- The RouterOS `sent=N received=N packet-loss=N%` footer, cross-checked against the parser's sample count. A `WARN parser drift` line fires if they disagree — signal to investigate the regex.
+- A `cycle done` line with wall-clock timings for the three phases (`connect`, `command`, `parse`) and the total.
+
+For even deeper diagnostics, also set `debug_ssh = true` — this enables `-vvv` on the underlying ssh client and `$Net::OpenSSH::debug = -1`, dumping the full ssh protocol trace to the same file.
+
+> ⚠️ **Debug logs contain secrets.** With `debug = true` the probe dumps its full Net::OpenSSH options hash to `debug_logfile`, including `routerospass` in plaintext (when password auth is in use) and the on-disk path of `ssh_key_path` (when key auth is in use). Only enable debug on targets where the log file is readable by trusted operators, and scrub or redact logs before sharing them externally (support tickets, public issue trackers, pastebins). If you've been running with debug on historically, consider rotating any historical `debug_logfile` files whose contents may have been exposed.
+
 ### Multiplexed SSH Connections
 
 There are some requirements for this feature to work.  OpenSSH requires that the directory and it's parents, where the Master Control Socket File is created, must be writable only by the current effective user or root, otherwise the connection will be aborted to avoid insecure operation.  By default ~/.libnet-openssh-perl is used.
 
-This probe will attempt to determine the $HOME directory of the user running/executing Smokeping, usually "smokeping" or "root".  In some cases, if using Docker or other container platform.  For example, the user could be "abc" in the case of using s6-supervise.  You can override this behaviour and specify the directory where the Master Control Socket File is created by setting the multiplex_socket_file_path option in the Probes config file.  You must ensure that the path meets the requirements as previously stated and that the permission masks be 0755 or more restrictive so that no other user can write to the dir/file.
+This probe will attempt to determine the $HOME directory of the user running/executing Smokeping, usually "smokeping" or "root".  In some cases, if using Docker or other container platform.  For example, the user could be "abc" in the case of using s6-supervise.  You can override this behaviour and specify the directory where the Master Control Socket File is created by setting the multiplex_control_socket_path option in the Probes config file.  You must ensure that the path meets the requirements as previously stated and that the permission masks be 0755 or more restrictive so that no other user can write to the dir/file.
 
   - The error you will see in the smokeping.log (smokeping debug and logging enabled) if you have defined your own socket file path w/o properly setting up permissions:
 
@@ -149,12 +224,16 @@ pings = 20
 # dscp_id = <id number> # Not used by default
 # rtable = <routing table name> # Not used by default
 # do_not_fragment = false # Not used by default
-routerospass = <userpass>
+routerospass = <userpass> # Optional.  Omit if using ssh_key_path or ssh-agent.
 routerosuser = <username>
 # ssh_binary_path = /usr/bin/ssh
+# ssh_key_path = /etc/smokeping/id_ed25519 # Optional.  If set, use key auth instead of routerospass.  See SSH Key Authentication section above.
+# ssh_connect_timeout = 10 # Default.  Bounds TCP/SSH handshake; lower this to fail faster on unreachable routers.
+# ssh_timeout = 60 # Default.  Bounds the overall ssh session including the ping command.
+# ssh_strict_host_key_checking = accept-new # Default.  Other values: 'no' (trust any key), 'yes' (require pre-seeded known_hosts)
 multiplex_ssh = true # Default
 # multiplex_control_persist_time = 10 # Default is 10 min.  A value of 0 will leave socket file indefinitely
-# multiplex_control_file_path = ~/.libnet-openssh-perl # Default
+# multiplex_control_socket_path = ~/.libnet-openssh-perl # Default
 debug = false # Default
 debug_logfile = /tmp/smokeping_openssh_mtik.log
 ```
@@ -178,7 +257,7 @@ host = speedtest-nyc1.digitalocean.com
 # psource - uses parent defined
 rtable = secondary_wan
 # multiplex_ssh = true # Default
-multiplex_control_file_path = /tmp/smokeping_ssh_sockets
+multiplex_control_socket_path = /tmp/smokeping_ssh_sockets
 multiplex_control_persist_time = 0 # Indefinitely
 debug = true
 
@@ -196,19 +275,26 @@ source = <remoterouter1_WAN_IP_Address>
 # psource - No default defined, will use source address to source pings
 host = <IP_of_interest>
 ssh_port = 22431
+ssh_connect_timeout = 5 # Shorter than default 10s; fail fast if this remote router is down so the step doesn't blow out
 debug = true
 debug_logfile = /tmp/smokeping_remote_router1.log
 
 ++ remote_router2
+# Key-auth example: this target overrides the probe-level password by setting ssh_key_path
+# and leaving routerospass unset.  See the "SSH Key Authentication" section above for setup.
 title = Remote Router2
 source = <remoterouter2_WAN_IP_Address>
 psource = <some_other_IP_address_on_remote_router>
 host = <IP_of_interest>
 rtable = <name_of_routing_table_other_than_main>
 ssh_port = 29437
+ssh_key_path = /etc/smokeping/id_ed25519
 multiplex_ssh = false # Don't use multiplexed ssh connections - but why would you not want to
 
 ++ remote_router3
+# ssh-agent example: with both routerospass and ssh_key_path unset (and not inherited from
+# the probe), Net::OpenSSH falls through to SSH_AUTH_SOCK / ~/.ssh/id_* identity files.
+# Useful when the smokeping process runs in a container with an agent socket mounted.
 title = Remote Router3
 source = <remoterouter3_WAN_IP_Address>
 host = <IP_of_interest>
@@ -218,7 +304,7 @@ dscp_id = 5
 do_not_fragment = true
 ssh_port = 29437
 # multiplex_ssh = true # Default behaviour
-multiplex_control_file_path = /tmp/smokeping_ssh_sockets # Override default ~/.libnet-openssh-perl
+multiplex_control_socket_path = /tmp/smokeping_ssh_sockets # Override default ~/.libnet-openssh-perl
 multiplex_control_persist_time = 20 # Override to use 20 minutes
 ```
 
@@ -228,11 +314,6 @@ multiplex_control_persist_time = 20 # Override to use 20 minutes
 ### Bugs
 
 - None reported
-
-### TODO
-
-- Add support 
-  - SSH Key Authentication
 
 ### License
 
